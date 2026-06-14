@@ -30,7 +30,6 @@ collected_at = now.strftime("%Y-%m-%d %H:%M:%S")
 # Google Sheets接続
 # =========================
 
-# ローカル実行用
 if os.path.exists("credentials.json"):
 
     creds = Credentials.from_service_account_file(
@@ -41,7 +40,6 @@ if os.path.exists("credentials.json"):
         ]
     )
 
-# GitHub Actions用
 else:
 
     service_account_info = json.loads(
@@ -64,7 +62,7 @@ bus_sheet = spreadsheet.worksheet("BusData")
 routes_sheet = spreadsheet.worksheet("Routes")
 
 # =========================
-# 既存データ読み込み
+# 既存データ読み込み（重複防止）
 # =========================
 
 print("既存データ取得中...")
@@ -81,19 +79,16 @@ for row in rows[1:]:
     date_value = row[0]
     suji_id = row[4]
 
+    # ★ここが重複キー
     known_entries.add((date_value, suji_id))
 
 print(f"既存キー数: {len(known_entries)}")
 
 # =========================
-# buslines取得
+# 路線一覧取得
 # =========================
 
 print("路線一覧取得中...")
-
-routes_sheet = gc.open(
-    "北九州市営バス運用記録"
-).worksheet("Routes")
 
 route_rows = routes_sheet.get_all_values()
 
@@ -129,6 +124,9 @@ for route_id in route_ids:
             if not suji_id:
                 continue
 
+            # =========================
+            # ★重複チェック（ここが本体）
+            # =========================
             key = (date_str, suji_id)
 
             if key in known_entries:
@@ -139,13 +137,8 @@ for route_id in route_ids:
             bus_name = bus.get("BusName", "")
             plate_no = bus.get("PlateNo", "")
 
-            statuses = suji.get("SujiStatus", [])
-
-            if not statuses:
-                continue
-
+            # 始発時刻（sujiId末尾4桁）
             start_time = ""
-
             if len(suji_id) >= 4:
                 hhmm = suji_id[-4:]
                 start_time = f"{hhmm[:2]}:{hhmm[2:]}"
@@ -161,13 +154,13 @@ for route_id in route_ids:
                 start_time
             ])
 
+            # ★即時登録（同一実行内の重複防止）
             known_entries.add(key)
 
     except Exception as e:
 
         print(f"エラー: {route_id}")
         print(e)
-        
 
 # =========================
 # まとめて書き込み
