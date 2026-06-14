@@ -23,3 +23,5 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: python collect_bus_data.py
+
+#kyouseiCommit
