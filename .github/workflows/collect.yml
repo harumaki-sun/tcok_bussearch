@@ -1,10 +1,7 @@
 name: Collect Bus Data
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
-  push:
 
 jobs:
   collect:
