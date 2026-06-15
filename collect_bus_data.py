@@ -32,7 +32,7 @@ if (
 
 date_str = now.strftime("%Y-%m-%d")
 weekday_str = now.strftime("%a")
-collected_at = now.strftime("%Y-%m-%d %H:%M:%S")
+collected_at = now.strftime("%H:%M:%S")
 
 # =========================
 # Google Sheets接続
