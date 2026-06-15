@@ -166,17 +166,33 @@ for route_id in route_ids:
 # まとめて書き込み
 # =========================
 
+import time
+
 if new_rows:
 
     print(f"{len(new_rows)}件追加")
 
-    bus_sheet.append_rows(
-        new_rows,
-        value_input_option="USER_ENTERED"
-    )
+    success = False
 
-else:
+    for attempt in range(3):
 
-    print("追加データなし")
+        try:
 
-print("完了")
+            bus_sheet.append_rows(
+                new_rows,
+                value_input_option="USER_ENTERED"
+            )
+
+            print("書き込み成功")
+            success = True
+            break
+
+        except Exception as e:
+
+            print(f"書き込み失敗 {attempt + 1}/3")
+            print(e)
+
+            time.sleep(10)
+
+    if not success:
+        raise Exception("Google Sheetsへの書き込み失敗")
