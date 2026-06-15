@@ -14,8 +14,16 @@ from google.oauth2.service_account import Credentials
 jst = ZoneInfo("Asia/Tokyo")
 now = datetime.now(jst)
 
-if 0 <= now.hour < 5:
-    print("0:00～5:00のため終了")
+from datetime import time
+
+current_time = now.time()
+
+if (
+    current_time >= time(23, 10)
+    or
+    current_time < time(5, 20)
+):
+    print("運行終了時間帯のため終了")
     raise SystemExit
 
 # =========================
