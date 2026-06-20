@@ -20,3 +20,8 @@ jobs:
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
         run: python collect_bus_data.py
+      
+      - name: Collect Operating Bus
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: python collect_operating_bus.py
