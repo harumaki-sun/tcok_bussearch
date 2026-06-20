@@ -80,10 +80,11 @@ response = requests.get(
     timeout=30
 )
 
+print("status:", response.status_code)
+print("content-type:", response.headers.get("Content-Type"))
+print(response.text[:500])
+
 response.raise_for_status()
-
-xml_text = response.text
-
 # =========================
 # XML解析
 # =========================
