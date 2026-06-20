@@ -2,7 +2,6 @@ import json
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
-import xml.etree.ElementTree as ET
 
 import gspread
 import requests
@@ -80,40 +79,26 @@ response = requests.get(
     timeout=30
 )
 
-print("status:", response.status_code)
-print("content-type:", response.headers.get("Content-Type"))
-print(response.text[:500])
-
 response.raise_for_status()
-# =========================
-# XML解析
-# =========================
 
-root = ET.fromstring(xml_text)
-
-ns = {
-    "ns": "http://schemas.datacontract.org/2004/07/Art.BusFcst.Web.Controllers"
-}
+data = response.json()
 
 new_rows = []
 
-for item in root.findall("ns:OperationBuses", ns):
+for item in data:
 
-    route_id = item.find("ns:RouteId", ns)
-    staffe_name = item.find("ns:StaffeName", ns)
+    route_id = item.get("RouteId", "")
+    staffe_name = item.get("StaffeName", "")
 
-    if route_id is None:
-        continue
-
-    if staffe_name is None:
+    if not route_id:
         continue
 
     new_rows.append([
         date_str,
         weekday_str,
         collected_at,
-        route_id.text,
-        staffe_name.text
+        route_id,
+        staffe_name
     ])
 
 # =========================
