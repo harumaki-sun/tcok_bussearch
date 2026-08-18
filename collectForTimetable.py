@@ -1,7 +1,7 @@
 import json
 import os
-from datetime import datetime
-from datetime import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 import gspread
@@ -46,71 +46,74 @@ bus_sheet = spreadsheet.worksheet("系統運用対照表")
 routes_sheet = spreadsheet.worksheet("シート23")
 
 # =========================
-# 系統運用対照表のA列マッピング取得
+# 1. 系統運用対照表のA列マッピング取得（O(1)参照）
 # =========================
-# A列（suji_id）の値と「何行目にあるか」を記録する辞書作成
-rows_a = bus_sheet.col_values(1)  # A列のデータをすべて取得
-suji_row_map = {}
-
-for idx, val in enumerate(rows_a[1:], start=2):  # ヘッダーを除外して2行目から
-    if val:
-        suji_row_map[str(val)] = idx
+rows_a = bus_sheet.col_values(1)
+suji_row_map = {str(val): idx for idx, val in enumerate(rows_a[1:], start=2) if val}
 
 # =========================
-# 路線一覧取得
+# 2. 路線一覧取得
 # =========================
 route_rows = routes_sheet.get_all_values()
 route_ids = [row[0] for row in route_rows[1:] if row and row[0]]
 
 # =========================
-# バスデータ収集 & 更新セル準備
+# 3. バスデータ並列収集（マルチスレッド処理）
+# =========================
+session = requests.Session()  # コネクション再利用で通信加速
+
+def fetch_route_data(route_id):
+    """単一の路線データを取得・解析する関数"""
+    url = f"https://kitakyushu.busyohou.jp/api/v1/busstop/bus_maps?rid={route_id}"
+    extracted = []
+    try:
+        response = session.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            sujis = data.get("Sujis", [])
+            for suji in sujis:
+                suji_id = str(suji.get("SujiId", ""))
+                if suji_id:
+                    bus = suji.get("Bus", {})
+                    plate_no = str(bus.get("PlateNo", "")).strip()
+                    extracted.append((suji_id, plate_no))
+    except Exception:
+        pass
+    return extracted
+
+# 10スレッドで同時にAPIへアクセスしてデータ収集
+all_results = []
+with ThreadPoolExecutor(max_workers=10) as executor:
+    results = executor.map(fetch_route_data, route_ids)
+    for res in results:
+        all_results.extend(res)
+
+# =========================
+# 4. 更新対象セルの整形・重複排除
 # =========================
 cells_to_update = []
-processed_sujis = set()  # 同一実行内の重複防止
+processed_sujis = set()
 
-for route_id in route_ids:
-    try:
-        data = requests.get(
-            f"https://kitakyushu.busyohou.jp/api/v1/busstop/bus_maps?rid={route_id}",
-            timeout=30
-        ).json()
+for suji_id, plate_no in all_results:
+    if suji_id in processed_sujis:
+        continue
 
-        sujis = data.get("Sujis", [])
+    if suji_id in suji_row_map and plate_no:
+        formatted_plate = plate_no.zfill(4)
+        target_row = suji_row_map[suji_id]
+        cells_to_update.append(
+            gspread.Cell(row=target_row, col=6, value=formatted_plate)
+        )
 
-        for suji in sujis:
-            suji_id = str(suji.get("SujiId", ""))
-
-            if not suji_id or suji_id in processed_sujis:
-                continue
-
-            # A列に該当するsuji_idが存在するかチェック
-            if suji_id in suji_row_map:
-                bus = suji.get("Bus", {})
-                plate_no = str(bus.get("PlateNo", "")).strip()
-
-                if plate_no:
-                    # 先頭に0を補填して4桁に整形（例: "6" -> "0006"）
-                    formatted_plate = plate_no.zfill(4)
-                    target_row = suji_row_map[suji_id]
-
-                    # 更新用セルオブジェクトの作成 (F列 = 6列目)
-                    cells_to_update.append(
-                        gspread.Cell(row=target_row, col=6, value=formatted_plate)
-                    )
-
-            processed_sujis.add(suji_id)
-
-    except Exception:
-        pass  # 必要最小限の出力のため失敗時はスキップ
+    processed_sujis.add(suji_id)
 
 # =========================
-# まとめて書き込み（一括更新）
+# 5. まとめて一括書き込み
 # =========================
 if cells_to_update:
     import time
     for attempt in range(3):
         try:
-            # 1回のAPIリクエストでまとめてF列を更新
             bus_sheet.update_cells(cells_to_update, value_input_option="USER_ENTERED")
             print(f"{len(cells_to_update)}件のナンバー情報を更新しました")
             break
